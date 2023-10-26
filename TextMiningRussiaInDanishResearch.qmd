@@ -1,0 +1,174 @@
+---
+title: "Text mining Danish academic publications about Russia"
+format: html
+---
+
+This Rmarkdown demonstrates text mining on data from the [NORA - National Open Research Analysis platform](https://forskningsportal.dk). In this tutorial we will we working on data from the [Local Systems Data](https://forskningsportal.dk/data-from-local-systems/)-section. The "About" page says the following:
+
+>Explore data on Danish research – from funding to publications, datasets, patents, etc. [...].
+
+NORA makes it possible to search across the research and in this tutroail we will be working on research on Russia. Before venturing into this data we'll need to dwell a bit on our tool for analysis, R, and some libraries for R.
+
+# Loading relevant libraries
+
+The dataset is processed in the software programme R, offering various methods for statistical analysis and graphic representation of the results. In R, one works with packages each adding numerous functionalities to the core functions of R. In this example, the relevant packages are:
+
+Documentation for each package: <br>
+*https://www.tidyverse.org/packages/ <br>
+*https://cran.r-project.org/web/packages/tidytext/vignettes/tidytext.html <br>
+*https://lubridate.tidyverse.org/ <br>
+*https://ggplot2.tidyverse.org/ <br>
+*https://cran.r-project.org/web/packages/ggwordcloud/vignettes/ggwordcloud.html<br>
+
+Additional information about R: 
+https://www.r-project.org/
+
+```{r, message=FALSE}
+library(tidyverse)
+library(tidytext)
+library(ggwordcloud)
+library(readxl)
+```
+
+
+
+# Importing data
+
+[Explain this]
+
+```{r}
+rus_research <- read_excel("data/dki-export-62263.xlsx", 
+    skip = 3)
+```
+
+# Initial analysis
+
+[Explain this]
+
+```{r}
+rus_research %>% 
+  count(Source, sort = TRUE)
+  
+```
+
+# Tidytext mining format 
+
+[Explain this]
+
+How many of the 712 has an abstract
+
+```{r}
+rus_research %>% 
+  count(is.na(Abstract))
+```
+
+## Text mining on Titles
+
+```{r}
+rus_research %>% 
+  unnest_tokens(word, Title) -> rus_tidy
+```
+
+[Explain this]
+
+```{r}
+rus_tidy %>% 
+  count(word, sort = TRUE)
+```
+
+```{r}
+rus_tidy %>% 
+  anti_join(stop_words) %>% 
+  count(word, sort = TRUE)
+```
+
+
+
+
+### Bigrams and networks
+
+
+#Cleaning 
+
+cold war, post soviet etc
+
+```{r}
+rus_research %>% 
+  mutate(Title = str_replace_all(Title, regex("cold war", ignore_case = TRUE), "cold_war")) %>% 
+  mutate(Title = str_replace_all(Title, regex("covid-19", ignore_case = TRUE), "covid_19")) %>% 
+  mutate(Title = str_replace_all(Title, regex("post-soviet", ignore_case = TRUE), "post_soviet")) %>% 
+  mutate(Title = str_replace_all(Title, regex("post-socialist", ignore_case = TRUE), "post_soviet")) %>% 
+  mutate(Title = str_replace_all(Title, regex("soviet union", ignore_case = TRUE), "soviet_union"))-> rus_research_clean
+```
+
+
+```{r}
+rus_bigram <- rus_research_clean %>% 
+  unnest_tokens(bigram, Title, token = "ngrams", n = 2)
+```
+
+
+
+```{r}
+rus_bigram %>% 
+  count(bigram, sort = TRUE)
+```
+
+explain
+```{r}
+rus_bigram %>% 
+   separate(bigram, c("word1", "word2"), sep = " ") -> rus_bigram
+```
+
+
+explain
+```{r}
+rus_bigram %>% 
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word) -> rus_bigram_filtered 
+```
+
+
+```{r}
+rus_bigram_filtered %>% 
+  count(word1, word2, sort = TRUE)
+```
+
+
+```{r}
+rus_bigram_filtered %>% 
+  count(word1, word2, sort = TRUE)
+```
+
+
+```{r}
+rus_bigram_filtered %>% 
+  count(word1, word2, sort = TRUE) -> rus_bigram_count
+```
+
+
+
+
+
+```{r}
+library(igraph)
+
+bigram_graph <- rus_bigram_count %>%
+  filter(n > 4) %>%
+  graph_from_data_frame()
+```
+
+
+
+```{r}
+library(ggraph)
+a <- grid::arrow(type = "closed", length = unit(.15, "inches"))
+
+ggraph(bigram_graph, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = "darkgreen", size = 5) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+  theme_void()
+```
+
