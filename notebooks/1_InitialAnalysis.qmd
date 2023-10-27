@@ -1,0 +1,71 @@
+---
+title: "Initial analysis of the Danish publications on Russia"
+author: "Max Odsbjerg Pedersen"
+format: html
+---
+
+This Rmarkdown demonstrates initial analysis of data from the [NORA - National Open Research Analysis platform](https://forskningsportal.dk). In this tutorial we will we working on data from the [Local Systems Data](https://forskningsportal.dk/data-from-local-systems/)-section. The "About" page says the following:
+
+>Explore data on Danish research – from funding to publications, datasets, patents, etc. [...].
+
+NORA makes it possible to search across the research and in this tutorial we will be working on research on Russia. Before venturing into this data we'll need to dwell a bit on our tool for analysis, R, and some libraries for R.
+
+# Loading relevant libraries
+
+The dataset is processed in the software programme R, offering various methods for statistical analysis and graphic representation of the results. In R, one works with packages each adding numerous functionalities to the core functions of R. In this example, the relevant packages are:
+
+Documentation for each package: <br>
+*https://www.tidyverse.org/packages/ <br>
+*https://cran.r-project.org/web/packages/tidytext/vignettes/tidytext.html <br>
+*https://lubridate.tidyverse.org/ <br>
+*https://ggplot2.tidyverse.org/ <br>
+*https://cran.r-project.org/web/packages/ggwordcloud/vignettes/ggwordcloud.html<br>
+
+Additional information about R: 
+https://www.r-project.org/
+
+```{r, message=FALSE}
+library(tidyverse)
+library(readxl)
+```
+
+
+
+# Importing data
+
+[Explain this]
+
+```{r}
+rus_research <- read_excel("data/dki-export-62263.xlsx", 
+    skip = 3)
+```
+
+# Initial analysis
+
+## Who is publishing the most about Russia in Denmark?
+
+Using the `count()`-function we can see which author has the most publications on russia.
+
+```{r}
+rus_research %>% 
+  count(Authors, sort = TRUE)
+```
+
+Using the `count()`-function once again we can see which university has the most publications on Russia:
+
+```{r}
+rus_research %>% 
+  count(Source, sort = TRUE)
+```
+
+## Publications over time dispersed on universities
+
+```{r}
+rus_research %>% 
+  filter(Source %in% c("au", "ku", "ruc", "sdu", "aau")) %>% 
+  count(`Publication Year`, Source) %>% 
+  ggplot(aes(x = `Publication Year`, y = n, group = Source, color = Source)) +
+  geom_line(aes(linetype = Source)) +
+  scale_x_continuous(breaks = seq(2011, 2023, 1))+
+  labs(title = "Publications over time dispersed on universities", y = "No. Publications")
+```
