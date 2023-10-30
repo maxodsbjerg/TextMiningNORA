@@ -1,0 +1,219 @@
+---
+title: "In class exercises"
+format: html
+---
+
+This Rmarkdown demonstrates data and text mining on data from the [NORA - National Open Research Analysis platform](https://forskningsportal.dk). In this tutorial we will we working on data from the [Local Systems Data](https://forskningsportal.dk/data-from-local-systems/)-section. The "About" page says the following:
+
+>Explore data on Danish research – from funding to publications, datasets, patents, etc. [...].
+
+NORA makes it possible to search across the research and in this tutorial we will be working on research on Russia. Before venturing into this data we'll need to dwell a bit on our tool for analysis, R, and some libraries for R.
+
+# Loading relevant libraries
+
+The dataset is processed in the software programme R, offering various methods for statistical analysis and graphic representation of the results. In R, one works with packages each adding numerous functionalities to the core functions of R. In this example, the relevant packages are:
+
+Documentation for each package: <br>
+*https://www.tidyverse.org/packages/ <br>
+*https://cran.r-project.org/web/packages/tidytext/vignettes/tidytext.html <br>
+*https://lubridate.tidyverse.org/ <br>
+*https://ggplot2.tidyverse.org/ <br>
+*https://cran.r-project.org/web/packages/ggwordcloud/vignettes/ggwordcloud.html<br>
+
+Additional information about R: 
+https://www.r-project.org/
+
+```{r, message=FALSE}
+library(tidyverse)
+library(tidytext)
+library(ggwordcloud)
+library(readxl)
+```
+
+
+
+# Importing data
+
+The first step is to import the data into R. Since the export from NORA is an excel-file we use the `read_excel`-function. Since the first three rows in the dataset is metadata about the query that created the data we skip these three rows. 
+```{r}
+rus_research <- read_excel("../data/dki-export-62263.xlsx", 
+    skip = 3)
+```
+
+# Initial analysis
+
+In the query we specified that we only wanted publications from the Humanities and from Social Science. Let's examine how the publications disperses on these two research fields. Using the `count`-function on the column "DK Main Research Area" we get this dispersion: 
+```{r}
+rus_research %>% 
+  count(`DK Main Research Area`)
+```
+Pretty close 
+
+# Text mining on Abstracts
+If we want to perform text mining on this publication data there is particular two columns interesting: "Title" and "Abstract". The Abstract column contains the most text and will be more of interest. But not all the publications have abstracts. In order to know many publications lacks an abstract we use the `count`-function once again in conjunction with the function `is.na`. If a publications is missing an Abstract it will be listed as "NA" and the `is.na`-function returns TRUE if the publications is missing a publication and FALSE if it contains an Abstract.
+
+```{r}
+rus_research %>% 
+  count(is.na(Abstract))
+```
+443 of the publications thus contains an Abstract which we will be text mining. 
+
+The data processing will be based on the Tidy Data Principle as it is implemented in the tidytext package. The notion is to take text and break it into individual words. In this way, there will be just one word per row in the dataset. This is achieved by using the `unnest_tokens`-function:
+
+```{r}
+rus_research %>% 
+  filter( Abstract != is.na(Abstract)) %>% 
+  unnest_tokens(word, Title) -> rus_tidy
+```
+
+Since we now has the text from the titles on the one word pr. row-format we can count the words to see, which words are used most frequently. 
+
+```{r}
+rus_tidy %>% 
+  count(word, sort = TRUE)
+```
+Not surprisingly, particles are the most common words we find. This is not particularly interesting for us in this enquiry. We sort them out by using a stop word list:
+```{r}
+rus_tidy %>% 
+  anti_join(stop_words) %>% 
+  count(word, sort = TRUE)
+```
+Thus we see a lot more interesting words. But many of these words might be expected to belong a specific periode (e.g. Ukraine+War in the wake of the annexation of Crimea in 2014 and after the fullblown invasion in 2022). Luckily R can count words within year:
+
+```{r}
+rus_tidy %>% 
+  anti_join(stop_words) %>% 
+  count(word,  `Publication Year`, sort = TRUE)
+```
+Doing this however hampers the perspective so in order to do this we want to create at visualisation of the 5 most used words withing these year:
+
+```{r}
+rus_tidy %>% 
+  anti_join(stop_words, by = "word") %>% 
+  count(word,  `Publication Year`, sort = TRUE) %>% 
+  group_by(`Publication Year`) %>%
+  slice_max(n, n = 5) %>%
+  mutate(`Publication Year` = as.factor(`Publication Year`),
+          word = reorder_within(word, n, `Publication Year`)) %>%
+  ungroup() %>%
+  ggplot(aes(word, n, fill = `Publication Year`)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~`Publication Year`, ncol = 3, scales = "free") +
+  scale_x_reordered() +
+  labs(x = "n", y = NULL) + 
+  coord_flip()
+```
+In 2019 we see that "post" and "soviet" both figure and most likely this is from the constellation "post-soviet", but since tidytext break on spaces, but also special characters like "-" it becomes two words. We'll try to handle this in the next session. In this session we'll also try to text mine a bit more context based on the above visualisation. 
+
+# Bigrams and networks
+In this section we'll try to give a bit more context by seeing which words is used before words of interest. But as we've just seen tidy text destroys semantic units and before venturing on we want to make sure it doesn't destroy most common semantic units in our material such as "Post-soviet". This will be further explained in the Cleaning section
+
+#Cleaning 
+Using the tidytext principle a proper noun like "Soviet Union" will split “soviet” and “union” into separate rows. This results in a loss of meaning because “soviet” and “union” on their own is a reduction of meaning. "Soviet Union" is a semantic unit, which we are destroying when converting to the tidytext-format. We are therefore interested in avoiding these instances and this is done via the regular expression:
+
+>"Soviet Union", "soviet_union"
+
+This expression prompts R to look for all the instances where "Soviet" is followed by a space, followed by "Union". Then the space is replaced by “_” so that:
+
+>"Soviet Union" is changed to "soviet_union"
+
+
+
+```{r}
+rus_research %>% 
+  mutate(Title = str_replace_all(Title, regex("cold war", ignore_case = TRUE), "cold_war")) %>% 
+  mutate(Title = str_replace_all(Title, regex("covid-19", ignore_case = TRUE), "covid_19")) %>% 
+  mutate(Title = str_replace_all(Title, regex("post-soviet", ignore_case = TRUE), "post_soviet")) %>% 
+  mutate(Title = str_replace_all(Title, regex("post-socialist", ignore_case = TRUE), "post_soviet")) %>% 
+  mutate(Title = str_replace_all(Title, regex("soviet union", ignore_case = TRUE), "soviet_union"))-> rus_research_clean
+```
+
+This cleaning will prove to be inadequate, since there certainly will be more proper nouns spanning over more than one word. Besides that there might be other semantic units than just proper nouns. You can allways return to this step and put in more.
+The above code is in reality nothing more than a complex "search and replace"-function as we know it from word. The only difference is that we use regular expressions. These can be used to extract data from text or alter it, as we have done here. Regular expression are very powerful as they can be used to search after complex patterns of text. Regular expression are also a bit complex and a thorough survey is outside the scope of this workshop. 
+
+# Bigrams
+N-grams are overlapping, so in a scenario with bigrams, the text "the happy cat walks on the ridge" becomes:
+
+"the happy", "happy cat", "cat walks", "walks", "on the ridge", "the ridge NA"
+
+Please note that the last word in the last bigram is the value "NA". There is no last word in this bigram.
+
+As before, we use unnest_tokens, but this time we specify that we want word pairs (bigrams).
+
+```{r}
+rus_bigram <- rus_research_clean %>% 
+  unnest_tokens(bigram, Title, token = "ngrams", n = 2)
+```
+
+
+Just like with before with words, we can also count bigrams:
+
+```{r}
+rus_bigram %>% 
+  count(bigram, sort = TRUE)
+```
+
+Once again we encounter stop words that are disrupting us. We would like to filter out word pairs with stop words. Before we can remove word pairs where one of the words is a stop word, we need to split the column "bigram" into two: "word1", "word2":
+
+```{r}
+rus_bigram %>% 
+   separate(bigram, c("word1", "word2"), sep = " ") -> rus_bigram
+```
+
+
+Then we can filter out the stop words in both columns, which we save to a new dataframe:
+```{r}
+rus_bigram %>% 
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word) -> rus_bigram_filtered 
+```
+
+
+Next, we can count our bigrams without stop words:
+```{r}
+rus_bigram_filtered %>% 
+  count(word1, word2, sort = TRUE)
+```
+
+First of all, we save the above count to a new data frame so that we can continue working with it:
+
+```{r}
+rus_bigram_filtered %>% 
+  count(word1, word2, sort = TRUE) -> rus_bigram_count
+```
+
+
+Afterwards, we use the "igraph" package to convert our dataframe into a network graph element. Before that, we specify that we are only interested in bigrams that occur more than 3 times:
+
+```{r}
+library(igraph)
+
+bigram_graph <- rus_bigram_count %>%
+  filter(n >= 3) %>%
+  graph_from_data_frame()
+```
+
+Finally, we use the "ggraph" package to visualize the network:
+
+
+
+```{r}
+library(ggraph)
+a <- grid::arrow(type = "closed", length = unit(.15, "inches"))
+
+ggraph(bigram_graph, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = "darkgreen", size = 5) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+  theme_void()
+```
+So let's say we a intrigued by the word combination of "soft power" and want to find the publications who has this in it's abstract:
+
+```{r}
+rus_research %>% 
+  filter(str_detect(Abstract, regex("soft power", ignore_case = TRUE)))
+```
+
+
+
