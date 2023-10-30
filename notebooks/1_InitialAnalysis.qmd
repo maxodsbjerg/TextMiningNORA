@@ -36,7 +36,7 @@ library(readxl)
 [Explain this]
 
 ```{r}
-rus_research <- read_excel("data/dki-export-62263.xlsx", 
+rus_research <- read_excel("../data/dki-export-62263.xlsx", 
     skip = 3)
 ```
 
