@@ -8,5 +8,5 @@ NORA makes it possible to search across the research and in this tutorial we wil
 Following the file 3_CompletedWorkbook in the folder "notebooks" you can following each step of the data processing leading to the folllowing visualisation of the network of the most frequent bigrams in the publication's abstracts:
 
 <p align="center">
-  <img width="460" src="/graphics/network_bigrams_russia.png">
+  <img width="600" src="/graphics/network_bigrams_russia.png">
 </p>
